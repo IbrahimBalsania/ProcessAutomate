@@ -52,8 +52,8 @@
 	}
 	],
 	"mailConfig":{
-		"from":"support.mercury@credenceanalytics.com",
-		"to":"ibrahimbalsania@credenceanalytics.com",
-		"pass":"credencemfx"
+		"from":"",
+		"to":"",
+		"pass":""
 	}
 }
