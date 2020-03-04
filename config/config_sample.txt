@@ -52,8 +52,8 @@
 	}
 	],
 	"mailConfig":{
-		"from":"",
-		"to":"",
-		"pass":""
+		"from":"x",
+		"to":"x",
+		"pass":"x"
 	}
 }
