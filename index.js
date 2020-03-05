@@ -1,15 +1,14 @@
 var cmd = require('node-cmd');
 var copydir = require('copy-dir');
 var fs = require('fs');
-var dircompare = require('dir-compare');
-var shell = require('shelljs');
-var format = require('util').format;
 
 var destroy = require('./src/destroy');
 var createTableSpace = require('./src/createTableSpace');
 var mail = require('./src/sendMail');
 var logger = require('./src/logger');
 var createReleaseNote = require('./src/createReleaseNote');
+var createBackup = require('./src/createBackup');
+var createPatch = require('./src/createPatch');
 
 var readConfigFile = function () {
     try {
@@ -51,12 +50,15 @@ user_input.on('data',function(data){
 	else if(data == 2)
 	{
 		console.log("Patch creation process started...");
-		createPatch(createPatchDone)
+		var createPatchObj = createPatch(config);
+		createPatchObj.createPatch(createPatchObj.createPatchDone);
+		//createPatch(createPatchDone)
 	}
 	else if(data == 3)
 	{
 		console.log("Backup process started...");
-		createBackup(createBackupDone);
+		var createBackupObj = createBackup(config);
+		createBackupObj.createBackup(createBackupObj.createBackupDone);
 	}
 	else if(data == 4)
 	{
@@ -146,135 +148,4 @@ function createSetupDone(val)
 		console.log("Process Complete")
 		process.exit()
 	}
-}
-function createBackup(done)
-{
-	// totalBackupCnt = parseFloat(config.backupData.length);
-	totalBackupCnt = parseFloat(config.backupData.length) * 2; 
-	for(var i=0 ; i<config.backupData.length ; i++)
-	{
-		//Copy WAR
-		shell.mkdir('-p', config.backupData[i].war_to);
-		var bkName = config.backupData[i].backup_name;
-		(function(i){
-			copydir(config.backupData[i].war_from, config.backupData[i].war_to, {
-				utimes: true,  // keep add time and modify time
-				mode: true,    // keep file mode
-				cover: true    // cover file when exists, default is true
-			}, function(err,bkName){
-				// console.log("###backup_name### 1 : "+bkName)
-				if(err){
-					console.log(config.backupData[i].backup_name+" : Error : "+err)
-					logger.error(config.backupData[i].backup_name+" : Error in copying WAR...");
-					logger.error(config.backupData[i].backup_name+" : ERROR : "+err);
-					done(config.backupData[i].backup_name+" : Error in copying WAR...");
-				}
-				else{
-					console.log(config.backupData[i].backup_name+' : WAR copy done...');
-					logger.info(config.backupData[i].backup_name+' : WAR copy done...');
-					done(config.backupData[i].backup_name+" : WAR copy done...");
-				} 
-			});
-		})(i);
-	}
-	for(var j=0 ; j<config.backupData.length ; j++)
-	{
-		//Export DB 
-		var bkName = config.backupData[j].backup_name;
-		console.log("###backup_name### 2 OUT : "+bkName);
-		(function(j){
-			cmd.get(config.backupData[j].db_export_cmd,function(err, data, stderr){
-				console.log("###backup_name### 2 : "+bkName)
-				if(err){
-					console.log(config.backupData[j].backup_name+' : DB Export Error : ',err)
-					logger.error(config.backupData[j].backup_name+" : Error while exporting database...");
-					logger.error(config.backupData[j].backup_name+' : DB Export Error : '+err);
-					done(config.backupData[j].backup_name+" : Error while exporting database...");
-				}
-				console.log('Data : ',data)
-				console.log(config.backupData[j].backup_name+' : DB Export Output : ',data)
-				// logger.info(config.backupData[j].backup_name+' : DB Export Data : '+data);
-				logger.info(config.backupData[j].backup_name+" : Database export done...");
-				done(config.backupData[j].backup_name+" : Database export done...");
-			});
-			cmd.run('touch example.created.file');
-		})(j);
-	}
-}
-var createBackupCnt = 0;
-var totalBackupCnt = 0;
-function createBackupDone(val)
-{
-	console.log(val)
-	createBackupCnt++
-	if(createBackupCnt==totalBackupCnt)
-	{
-		console.log("Backup Process Complete")
-		var mailObj = mail(config);
-		mailObj.transporter.sendMail(mailObj.mailOptions, function(error, info){
-			if (error) {
-				console.log(error);
-				process.exit();
-			} else {
-				console.log('Email sent: ' + info.response);
-				process.exit();
-			}
-		});
-	}
-}
-function createPatch(done)
-{
-	var options = {compareSize: true};
-	var path_dev = config.createPatch.dev_src;
-	var path_uat = config.createPatch.uat_src;
-	
-	var states = {'equal' : '==', 'left' : '->', 'right' : '<-', 'distinct' : '<>'};
-	
-	var res = dircompare.compareSync(path_dev, path_uat, options);
-	// console.log(format('equal: %s, distinct: %s, left: %s, right: %s, differences: %s, same: %s',res.equal, res.distinct, res.left, res.right, res.differences, res.same));
-	res.diffSet.forEach(function (entry) {
-		// console.log("entry : "+JSON.stringify(entry))
-		var state = states[entry.state];
-		var name1 = entry.name1 ? entry.name1 : '';
-		var fullname1 = entry.name1 ? entry.path1+"/"+entry.name1 : ''; // create array and copy file to new folder
-		var name2 = entry.name2 ? entry.name2 : '';
-		var fullname2 = entry.name2 ? entry.path2+"/"+entry.name1 : ''; // create array and copy file to old folder
-		fullname1 = fullname1.split("\\").join("/")
-		fullname2 = fullname2.split("\\").join("/")
-		var relativePath = entry.relativePath.split("\\").join("/")
-		
-		var patchNewFolder = "/code/new/"
-		var patchOldFolder = "/code/old/"
-		if(state == "<>" && entry.type1 == "file")
-		{
-			var vFileExt = name1.split(".")
-			if(config.createPatch.ignore_file_extension.indexOf(vFileExt[vFileExt.length-1].toLowerCase()) == -1)
-			{
-				console.log("["+name1+"] Different Files...")
-				// File modified
-				shell.mkdir('-p', config.createPatch.patch_path+patchNewFolder+relativePath);
-				shell.mkdir('-p', config.createPatch.patch_path+patchOldFolder+relativePath);
-				copydir.sync(fullname1, config.createPatch.patch_path+patchNewFolder+relativePath+"/"+name1, {utimes: true,mode: true,cover: true});
-				copydir.sync(fullname2, config.createPatch.patch_path+patchOldFolder+relativePath+"/"+name2, {utimes: true,mode: true,cover: true});
-			}
-		}
-		if(state == "->" && entry.type1 == "file")
-		{
-			var vFileExt = name1.split(".")
-			if(config.createPatch.ignore_file_extension.indexOf(vFileExt[vFileExt.length-1].toLowerCase()) == -1)
-			{
-				console.log("["+name1+"] New Files...")
-				// New file added
-				shell.mkdir('-p', config.createPatch.patch_path+patchNewFolder+relativePath);
-				copydir.sync(fullname1, config.createPatch.patch_path+patchNewFolder+relativePath+"/"+name1, {utimes: true,mode: true,cover: true});
-			}
-		}
-	});
-	createReleaseNote(config)
-	done("Patch Creation Done...")	
-}
-function createPatchDone(val)
-{
-	console.log(val)
-	process.exit()
 }
