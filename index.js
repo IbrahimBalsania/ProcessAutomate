@@ -68,7 +68,7 @@ user_input.on('data',function(data){
 	}
 	else if(data == 5)
 	{
-		console.log("Destroy process started...");
+		console.log("Test...");
 		var des = new destroy();
 		des.destroyOne();
 		logger.error("...Hello IB...");
