@@ -1,5 +1,3 @@
-var cmd = require('node-cmd');
-var copydir = require('copy-dir');
 var fs = require('fs');
 
 var destroy = require('./src/destroy');
@@ -9,6 +7,7 @@ var logger = require('./src/logger');
 var createReleaseNote = require('./src/createReleaseNote');
 var createBackup = require('./src/createBackup');
 var createPatch = require('./src/createPatch');
+var createSetup = require('./src/createSetup');
 
 var readConfigFile = function () {
     try {
@@ -43,7 +42,8 @@ user_input.on('data',function(data){
 			}
 			else{
 				console.log("Success : "+resp.msg)
-				createSetup(createSetupDone);
+				var createSetupObj = createSetup(config);
+				createSetupObj.createSetup(createSetupObj.createSetupDone);
 			}
 		})();
 	}
@@ -52,7 +52,6 @@ user_input.on('data',function(data){
 		console.log("Patch creation process started...");
 		var createPatchObj = createPatch(config);
 		createPatchObj.createPatch(createPatchObj.createPatchDone);
-		//createPatch(createPatchDone)
 	}
 	else if(data == 3)
 	{
@@ -89,63 +88,3 @@ user_input.on('data',function(data){
 		process.exit();
 	}
 })
-
-function createSetup(done)
-{
-	//Export DB 
-	try{
-		createTableSpace(config)
-	}catch(e){
-		console.log("Error in creating tablespace : "+e);
-		done("Error while creating tablespace...");
-	}
-		
-	cmd.get(config.createSetup.db_export_cmd,function(err, data, stderr){
-		if(err){
-			console.log('DB Export Error : ',err)
-			done("Error while exporting database...");
-		}
-		cmd.get(config.createSetup.db_import_cmd,function(err, data, stderr){
-			if(err){
-				console.log('DB Import Error : ',err)
-				done("Error while importing database...");
-			}
-			console.log('DB Import Output : ',data)
-			done("Database Setup Done...");
-		});
-		cmd.run('touch example.created.file');
-		console.log('DB Export Output : ',data)
-	});
-	cmd.run('touch example.created.file');
-
-	//Copy WAR
-	copydir(config.createSetup.war_from, config.createSetup.war_to, {
-			utimes: true,  // keep add time and modify time
-			mode: true,    // keep file mode
-			cover: true    // cover file when exists, default is true
-		}, function(err){
-		if(err){
-			console.log("Error : "+err)
-			done("Error in copying WAR...");
-		}
-		else{
-			console.log('File copied successfully...');
-			done("WAR Setup Done...");
-		} 
-	});
-}
-var createSetupCnt = 0;
-function createSetupDone(val)
-{
-	console.log(val)
-	if(val == "Error while creating tablespace...")
-	{
-		process.exit()
-	}
-	createSetupCnt++
-	if(createSetupCnt==1)
-	{
-		console.log("Process Complete")
-		process.exit()
-	}
-}
